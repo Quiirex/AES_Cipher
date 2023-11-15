@@ -96,9 +96,9 @@ class CBC:
 
 
 class CTR:
-    def __init__(self, key, nonce):
+    def __init__(self, key, iv):
         self.key = key
-        self.nonce = nonce
+        self.iv = iv
         self.block_size = len(self.key)
 
     def pad_data(self, data, block_size):
@@ -110,7 +110,7 @@ class CTR:
         padded_data = self.pad_data(data, self.block_size)
 
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        counter = int.from_bytes(self.iv, byteorder="big")
 
         encrypted_data = b""
         for i in range(0, len(padded_data), self.block_size):
@@ -129,7 +129,7 @@ class CTR:
     def decrypt(self, data):
         print(f"Decrypting with CTR mode..")
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        counter = int.from_bytes(self.iv, byteorder="big")
 
         decrypted_data = b""
         for i in range(0, len(data), self.block_size):
@@ -147,9 +147,9 @@ class CTR:
 
 
 class CCM:
-    def __init__(self, key, nonce):
+    def __init__(self, key, iv):
         self.key = key
-        self.nonce = nonce
+        self.iv = iv
         self.block_size = len(self.key)
 
     def pad_data(self, data):
@@ -161,7 +161,7 @@ class CCM:
         padded_data = self.pad_data(data)
 
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        counter = int.from_bytes(self.iv, byteorder="big")
 
         encrypted_data = b""
         for i in range(0, len(padded_data), self.block_size):
@@ -180,7 +180,7 @@ class CCM:
     def decrypt(self, data):
         print(f"Decrypting with CCM mode..")
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        counter = int.from_bytes(self.iv, byteorder="big")
 
         decrypted_data = b""
         for i in range(0, len(data), self.block_size):
@@ -209,9 +209,9 @@ class GUI:
 
         self.mode = None
         self.key = None
-        self.key_size = 16
-        self.iv_size = 16
-        self.nonce_size = 12
+        self.iv = None
+        self.key_size = 16  # 128-bitni ključ
+        self.iv_size = 16  # 128-bitni inicializacijski vektor
 
         self.input_frame = tk.Frame(root)
         self.input_frame.grid(row=0, column=0, padx=20, pady=20)
@@ -221,7 +221,7 @@ class GUI:
         )
         self.text_label.grid(row=0, column=0)
         self.loaded_file_label = tk.Label(
-            self.input_frame, text="<No file loaded>", width=45
+            self.input_frame, text="<No file loaded>", width=35
         )
         self.loaded_file_label.grid(row=0, column=1)
 
@@ -229,15 +229,22 @@ class GUI:
             self.input_frame, text="Key:", width=8, font=("Helvetica", 13, "bold")
         )
         self.text_label.grid(row=1, column=0)
-        self.key_label = tk.Label(self.input_frame, text="<No key loaded>", width=45)
+        self.key_label = tk.Label(self.input_frame, text="<No key loaded>", width=35)
         self.key_label.grid(row=1, column=1)
+
+        self.text_label = tk.Label(
+            self.input_frame, text="IV:", width=8, font=("Helvetica", 13, "bold")
+        )
+        self.text_label.grid(row=2, column=0)
+        self.iv_label = tk.Label(self.input_frame, text="<No IV loaded>", width=35)
+        self.iv_label.grid(row=2, column=1)
 
         self.output_label = tk.Label(
             self.input_frame, text="Output:", width=8, font=("Helvetica", 13, "bold")
         )
         self.output_label.grid(row=3, column=0)
         self.output_file_label = tk.Label(
-            self.input_frame, text="<Encrypt/Decrypt a file..>", width=45
+            self.input_frame, text="<Encrypt/Decrypt a file..>", width=35
         )
         self.output_file_label.grid(row=3, column=1)
 
@@ -278,6 +285,19 @@ class GUI:
         )
         self.upload_key_button.grid(row=1, column=1)
 
+        self.generate_iv_button = tk.Button(
+            self.button_frame,
+            text="Generate IV",
+            command=self.generate_iv,
+            width=8,
+        )
+        self.generate_iv_button.grid(row=2, column=0)
+
+        self.load_iv_button = tk.Button(
+            self.button_frame, text="Load IV..", command=self.load_iv, width=8
+        )
+        self.load_iv_button.grid(row=2, column=1)
+
         self.encrypt_button = tk.Button(
             self.button_frame, text="Encrypt", command=self.encrypt_file, width=8
         )
@@ -292,11 +312,36 @@ class GUI:
         if mode == "ECB":
             self.mode = ECB(self.key)
         elif mode == "CBC":
-            iv = os.urandom(self.iv_size)
-            self.mode = CBC(self.key, iv)
+            self.mode = CBC(self.key, self.iv)
         elif mode == "CTR":
-            nonce = os.urandom(self.nonce_size)
-            self.mode = CTR(self.key, nonce)
+            self.mode = CTR(self.key, self.iv)
+        elif mode == "CCM":
+            self.mode = CCM(self.key, self.iv)
+
+    def generate_iv(self):
+        self.iv = os.urandom(self.iv_size)
+        self.iv_label.config(text="IV generated and loaded.")
+        self.save_iv()
+
+    def save_iv(self):
+        iv = self.iv
+        if iv:
+            file_path = filedialog.asksaveasfilename(
+                filetypes=[("Text Files", "*.txt")]
+            )
+            with open(file_path, "wb") as file:
+                file.write(iv)
+        else:
+            messagebox.showerror("Error", "No IV generated to save!")
+
+    def load_iv(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
+        if file_path:
+            with open(file_path, "rb") as file:
+                self.iv = file.read()
+                self.iv_label.config(text="IV loaded.")
+        else:
+            messagebox.showerror("Error", "No IV loaded!")
 
     def generate_key(self):
         self.key = os.urandom(self.key_size)
@@ -320,7 +365,7 @@ class GUI:
                 self.key = file.read()
                 self.key_label.config(text="Key loaded.")
         else:
-            messagebox.showerror("Error", "No key uploaded!")
+            messagebox.showerror("Error", "No key loaded!")
 
     def load_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("All Files", "*.*")])
@@ -351,6 +396,13 @@ class GUI:
             if self.key is None:
                 messagebox.showerror("Error", "No key loaded!")
                 return
+            if (
+                isinstance(self.mode, CBC)
+                or isinstance(self.mode, CTR)
+                or isinstance(self.mode, CCM)
+            ) and self.iv is None:
+                messagebox.showerror("Error", "No IV loaded!")
+                return
             start = time.time()
             print(f"Starting encryption..")
             self.encrypted_content = self.mode.encrypt(self.loaded_file_content)
@@ -372,6 +424,13 @@ class GUI:
         if self.loaded_file_content:
             if self.key is None:
                 messagebox.showerror("Error", "No key loaded!")
+                return
+            if (
+                isinstance(self.mode, CBC)
+                or isinstance(self.mode, CTR)
+                or isinstance(self.mode, CCM)
+            ) and self.iv is None:
+                messagebox.showerror("Error", "No IV loaded!")
                 return
             start = time.time()
             print(f"Starting decryption..")
