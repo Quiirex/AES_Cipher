@@ -7,7 +7,7 @@ import time
 
 class ECB:
     def __init__(self, key):
-        self.key = key
+        self.key = None
 
     def pad_data(self, data, block_size):
         padding_length = block_size - len(data) % block_size
