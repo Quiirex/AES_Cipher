@@ -5,22 +5,24 @@ import os
 import time
 
 
-class ECB:
-    def __init__(self, key):
-        self.key = key
-        self.block_size = len(self.key)
-
-    def pad_data(self, data, block_size):
+class PaddingUtil:
+    def pad_data(data, block_size):
         padding_length = block_size - len(data) % block_size
         return data + bytes([padding_length] * padding_length)
 
-    def unpad_data(self, data):
+    def unpad_data(data):
         padding_length = data[-1]
         return data[:-padding_length]
 
+
+class ECB:
+    def __init__(self, key):
+        self.key = key
+        self.block_size = 16
+
     def encrypt(self, data):
         print(f"Encrypting with ECB mode..")
-        padded_data = self.pad_data(data, self.block_size)
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
 
         aes = pyaes.AES(self.key)
 
@@ -41,26 +43,18 @@ class ECB:
             decrypted_block = aes.decrypt(block)
             decrypted_data += bytes(decrypted_block)
 
-        return self.unpad_data(decrypted_data)
+        return PaddingUtil.unpad_data(decrypted_data)
 
 
 class CBC:
     def __init__(self, key, iv):
         self.key = key
         self.iv = iv
-        self.block_size = len(self.key)
-
-    def pad_data(self, data, block_size):
-        padding_length = block_size - len(data) % block_size
-        return data + bytes([padding_length] * padding_length)
-
-    def unpad_data(self, data):
-        padding_length = data[-1]
-        return data[:-padding_length]
+        self.block_size = 16
 
     def encrypt(self, data):
         print(f"Encrypting with CBC mode..")
-        padded_data = self.pad_data(data, self.block_size)
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
 
         aes = pyaes.AES(self.key)
         previous_block = self.iv
@@ -92,35 +86,29 @@ class CBC:
             decrypted_data += decrypted_block
             previous_block = block
 
-        return self.unpad_data(decrypted_data)
+        return PaddingUtil.unpad_data(decrypted_data)
 
 
 class CTR:
-    def __init__(self, key, iv):
+    def __init__(self, key, nonce):
         self.key = key
-        self.iv = iv
-        self.block_size = len(self.key)
-
-    def pad_data(self, data, block_size):
-        padding_length = block_size - len(data) % block_size
-        return data + bytes([padding_length] * padding_length)
+        self.nonce = nonce
+        self.block_size = 16
 
     def encrypt(self, data):
         print(f"Encrypting with CTR mode..")
-        padded_data = self.pad_data(data, self.block_size)
-
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.iv, byteorder="big")
+        counter = int.from_bytes(self.nonce, byteorder="big")
 
         encrypted_data = b""
-        for i in range(0, len(padded_data), self.block_size):
+        for i in range(0, len(data), self.block_size):
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
             counter += 1
 
             keystream = aes.encrypt(counter_block)
-            block = padded_data[i : i + self.block_size]
+            block = data[i : i + self.block_size]
             encrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(self.block_size)]
+                [block[j] ^ keystream[j] for j in range(len(block))]
             )
             encrypted_data += encrypted_block
 
@@ -129,7 +117,7 @@ class CTR:
     def decrypt(self, data):
         print(f"Decrypting with CTR mode..")
         aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.iv, byteorder="big")
+        counter = int.from_bytes(self.nonce, byteorder="big")
 
         decrypted_data = b""
         for i in range(0, len(data), self.block_size):
@@ -139,7 +127,7 @@ class CTR:
             keystream = aes.encrypt(counter_block)
             block = data[i : i + self.block_size]
             decrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(self.block_size)]
+                [block[j] ^ keystream[j] for j in range(len(block))]
             )
             decrypted_data += decrypted_block
 
@@ -150,15 +138,11 @@ class CCM:
     def __init__(self, key, iv):
         self.key = key
         self.iv = iv
-        self.block_size = len(self.key)
-
-    def pad_data(self, data):
-        padding_length = self.block_size - len(data) % self.block_size
-        return data + bytes([padding_length] * padding_length)
+        self.block_size = 16
 
     def encrypt(self, data):
         print(f"Encrypting with CCM mode..")
-        padded_data = self.pad_data(data)
+        padded_data = PaddingUtil.pad_data(data)
 
         aes = pyaes.AES(self.key)
         counter = int.from_bytes(self.iv, byteorder="big")
@@ -210,8 +194,10 @@ class GUI:
         self.mode = None
         self.key = None
         self.iv = None
+        self.nonce = None
         self.key_size = 16  # 128-bitni ključ
         self.iv_size = 16  # 128-bitni inicializacijski vektor
+        self.nonce_size = 8  # 64-bitni nonce
 
         self.input_frame = tk.Frame(root)
         self.input_frame.grid(row=0, column=0, padx=20, pady=20)
@@ -298,15 +284,28 @@ class GUI:
         )
         self.load_iv_button.grid(row=2, column=1)
 
+        self.generate_iv_button = tk.Button(
+            self.button_frame,
+            text="Generate nonce",
+            command=self.generate_nonce,
+            width=8,
+        )
+        self.generate_iv_button.grid(row=3, column=0)
+
+        self.load_iv_button = tk.Button(
+            self.button_frame, text="Load nonce..", command=self.load_nonce, width=8
+        )
+        self.load_iv_button.grid(row=3, column=1)
+
         self.encrypt_button = tk.Button(
             self.button_frame, text="Encrypt", command=self.encrypt_file, width=8
         )
-        self.encrypt_button.grid(row=3, column=0)
+        self.encrypt_button.grid(row=4, column=0)
 
         self.decrypt_button = tk.Button(
             self.button_frame, text="Decrypt", command=self.decrypt_file, width=8
         )
-        self.decrypt_button.grid(row=3, column=1)
+        self.decrypt_button.grid(row=4, column=1)
 
     def set_mode(self, mode):
         if mode == "ECB":
@@ -342,6 +341,31 @@ class GUI:
                 self.iv_label.config(text="IV loaded.")
         else:
             messagebox.showerror("Error", "No IV loaded!")
+
+    def generate_nonce(self):
+        self.nonce = os.urandom(self.nonce_size)
+        self.nonce_label.config(text="Nonce generated and loaded.")
+        self.save_nonce()
+
+    def save_nonce(self):
+        nonce = self.nonce
+        if nonce:
+            file_path = filedialog.asksaveasfilename(
+                filetypes=[("Text Files", "*.txt")]
+            )
+            with open(file_path, "wb") as file:
+                file.write(iv)
+        else:
+            messagebox.showerror("Error", "No nonce generated to save!")
+
+    def load_nonce(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
+        if file_path:
+            with open(file_path, "rb") as file:
+                self.nonce = file.read()
+                self.nonce_label.config(text="Nonce loaded.")
+        else:
+            messagebox.showerror("Error", "No nonce loaded!")
 
     def generate_key(self):
         self.key = os.urandom(self.key_size)
