@@ -48,6 +48,7 @@ class ECB:
 
 class CBC:
     def __init__(self, key, iv):
+        print(f"len(key): {len(key)}")
         self.key = key
         self.iv = iv
         self.block_size = 16
@@ -142,7 +143,7 @@ class CCM:
 
     def encrypt(self, data):
         print(f"Encrypting with CCM mode..")
-        padded_data = PaddingUtil.pad_data(data)
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
 
         aes = pyaes.AES(self.key)
         counter = int.from_bytes(self.iv, byteorder="big")
@@ -225,19 +226,28 @@ class GUI:
         self.iv_label = tk.Label(self.input_frame, text="<No IV loaded>", width=35)
         self.iv_label.grid(row=2, column=1)
 
+        self.text_label = tk.Label(
+            self.input_frame, text="Nonce:", width=8, font=("Helvetica", 13, "bold")
+        )
+        self.text_label.grid(row=3, column=0)
+        self.nonce_label = tk.Label(
+            self.input_frame, text="<No nonce loaded>", width=35
+        )
+        self.nonce_label.grid(row=3, column=1)
+
         self.output_label = tk.Label(
             self.input_frame, text="Output:", width=8, font=("Helvetica", 13, "bold")
         )
-        self.output_label.grid(row=3, column=0)
+        self.output_label.grid(row=4, column=0)
         self.output_file_label = tk.Label(
             self.input_frame, text="<Encrypt/Decrypt a file..>", width=35
         )
-        self.output_file_label.grid(row=3, column=1)
+        self.output_file_label.grid(row=4, column=1)
 
         self.mode_label = tk.Label(
             self.input_frame, text="Mode:", width=8, font=("Helvetica", 13, "bold")
         )
-        self.mode_label.grid(row=4, column=0)
+        self.mode_label.grid(row=5, column=0)
         self.mode = tk.StringVar()
         self.mode_menu = tk.OptionMenu(
             self.input_frame,
@@ -248,7 +258,7 @@ class GUI:
             "CCM",
             command=self.set_mode,
         )
-        self.mode_menu.grid(row=4, column=1, pady=5)
+        self.mode_menu.grid(row=5, column=1, pady=5)
 
         self.button_frame = tk.Frame(root)
         self.button_frame.grid(row=4, column=0, padx=20, pady=20)
@@ -313,7 +323,7 @@ class GUI:
         elif mode == "CBC":
             self.mode = CBC(self.key, self.iv)
         elif mode == "CTR":
-            self.mode = CTR(self.key, self.iv)
+            self.mode = CTR(self.key, self.nonce)
         elif mode == "CCM":
             self.mode = CCM(self.key, self.iv)
 
@@ -354,7 +364,7 @@ class GUI:
                 filetypes=[("Text Files", "*.txt")]
             )
             with open(file_path, "wb") as file:
-                file.write(iv)
+                file.write(nonce)
         else:
             messagebox.showerror("Error", "No nonce generated to save!")
 
@@ -421,11 +431,12 @@ class GUI:
                 messagebox.showerror("Error", "No key loaded!")
                 return
             if (
-                isinstance(self.mode, CBC)
-                or isinstance(self.mode, CTR)
-                or isinstance(self.mode, CCM)
+                isinstance(self.mode, CBC) or isinstance(self.mode, CCM)
             ) and self.iv is None:
                 messagebox.showerror("Error", "No IV loaded!")
+                return
+            if (isinstance(self.mode, CTR)) and self.nonce is None:
+                messagebox.showerror("Error", "No nonce loaded!")
                 return
             start = time.time()
             print(f"Starting encryption..")
@@ -450,11 +461,12 @@ class GUI:
                 messagebox.showerror("Error", "No key loaded!")
                 return
             if (
-                isinstance(self.mode, CBC)
-                or isinstance(self.mode, CTR)
-                or isinstance(self.mode, CCM)
+                isinstance(self.mode, CBC) or isinstance(self.mode, CCM)
             ) and self.iv is None:
                 messagebox.showerror("Error", "No IV loaded!")
+                return
+            if (isinstance(self.mode, CTR)) and self.nonce is None:
+                messagebox.showerror("Error", "No nonce loaded!")
                 return
             start = time.time()
             print(f"Starting decryption..")
