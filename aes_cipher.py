@@ -19,30 +19,23 @@ class ECB:
     def __init__(self, key):
         self.key = key
         self.block_size = 16
+        self.aes = pyaes.AES(self.key)
 
-    def encrypt(self, data):
-        print(f"Encrypting with ECB mode..")
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
-
-        aes = pyaes.AES(self.key)
-
-        encrypted_data = b""
-        for i in range(0, len(padded_data), self.block_size):
-            block = padded_data[i : i + self.block_size]
-            encrypted_block = aes.encrypt(block)
-            encrypted_data += bytes(encrypted_block)
-        return encrypted_data
-
-    def decrypt(self, data):
-        print(f"Decrypting with ECB mode..")
-        aes = pyaes.AES(self.key)
-
-        decrypted_data = b""
+    def _process_data(self, data, operation):
+        print(f"{operation.capitalize()}ing with ECB mode..")
+        processed_data = b""
         for i in range(0, len(data), self.block_size):
             block = data[i : i + self.block_size]
-            decrypted_block = aes.decrypt(block)
-            decrypted_data += bytes(decrypted_block)
+            processed_block = getattr(self.aes, operation)(block)
+            processed_data += bytes(processed_block)
+        return processed_data
 
+    def encrypt(self, data):
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        return self._process_data(padded_data, "encrypt")
+
+    def decrypt(self, data):
+        decrypted_data = self._process_data(data, "decrypt")
         return PaddingUtil.unpad_data(decrypted_data)
 
 
@@ -52,41 +45,38 @@ class CBC:
         self.key = key
         self.iv = iv
         self.block_size = 16
+        self.aes = pyaes.AES(self.key)
 
-    def encrypt(self, data):
-        print(f"Encrypting with CBC mode..")
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
-
-        aes = pyaes.AES(self.key)
+    def _process_data(self, data, operation):
+        print(f"{operation.capitalize()}ing with CBC mode..")
+        processed_data = b""
         previous_block = self.iv
-
-        encrypted_data = b""
-        for i in range(0, len(padded_data), self.block_size):
-            block = padded_data[i : i + self.block_size]
-            block = bytes(
-                [block[j] ^ previous_block[j] for j in range(self.block_size)]
-            )
-            encrypted_block = aes.encrypt(block)
-            encrypted_data += bytes(encrypted_block)
-            previous_block = encrypted_block
-
-        return encrypted_data
-
-    def decrypt(self, data):
-        print(f"Decrypting with CBC mode..")
-        aes = pyaes.AES(self.key)
-        previous_block = self.iv
-
-        decrypted_data = b""
         for i in range(0, len(data), self.block_size):
             block = data[i : i + self.block_size]
-            decrypted_block = aes.decrypt(block)
-            decrypted_block = bytes(
-                [decrypted_block[j] ^ previous_block[j] for j in range(self.block_size)]
-            )
-            decrypted_data += decrypted_block
-            previous_block = block
+            if operation == "encrypt":
+                block = bytes(
+                    [block[j] ^ previous_block[j] for j in range(self.block_size)]
+                )
+                processed_block = self.aes.encrypt(block)
+                previous_block = processed_block
+            else:
+                processed_block = self.aes.decrypt(block)
+                processed_block = bytes(
+                    [
+                        processed_block[j] ^ previous_block[j]
+                        for j in range(self.block_size)
+                    ]
+                )
+                previous_block = block
+            processed_data += bytes(processed_block)
+        return processed_data
 
+    def encrypt(self, data):
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        return self._process_data(padded_data, "encrypt")
+
+    def decrypt(self, data):
+        decrypted_data = self._process_data(data, "decrypt")
         return PaddingUtil.unpad_data(decrypted_data)
 
 
@@ -95,44 +85,28 @@ class CTR:
         self.key = key
         self.nonce = nonce
         self.block_size = 16
+        self.aes = pyaes.AES(self.key)
+
+    def _process_data(self, data, operation):
+        print(f"{operation.capitalize()}ing with CTR mode..")
+        counter = int.from_bytes(self.nonce, byteorder="big")
+        processed_data = b""
+        for i in range(0, len(data), self.block_size):
+            counter_block = counter.to_bytes(self.block_size, byteorder="big")
+            counter += 1
+            keystream = self.aes.encrypt(counter_block)
+            block = data[i : i + self.block_size]
+            processed_block = bytes(
+                [block[j] ^ keystream[j] for j in range(len(block))]
+            )
+            processed_data += processed_block
+        return processed_data
 
     def encrypt(self, data):
-        print(f"Encrypting with CTR mode..")
-        aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
-
-        encrypted_data = b""
-        for i in range(0, len(data), self.block_size):
-            counter_block = counter.to_bytes(self.block_size, byteorder="big")
-            counter += 1
-
-            keystream = aes.encrypt(counter_block)
-            block = data[i : i + self.block_size]
-            encrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(len(block))]
-            )
-            encrypted_data += encrypted_block
-
-        return encrypted_data
+        return self._process_data(data, "encrypt")
 
     def decrypt(self, data):
-        print(f"Decrypting with CTR mode..")
-        aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.nonce, byteorder="big")
-
-        decrypted_data = b""
-        for i in range(0, len(data), self.block_size):
-            counter_block = counter.to_bytes(self.block_size, byteorder="big")
-            counter += 1
-
-            keystream = aes.encrypt(counter_block)
-            block = data[i : i + self.block_size]
-            decrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(len(block))]
-            )
-            decrypted_data += decrypted_block
-
-        return decrypted_data
+        return self._process_data(data, "decrypt")
 
 
 class CCM:
@@ -140,46 +114,29 @@ class CCM:
         self.key = key
         self.iv = iv
         self.block_size = 16
+        self.aes = pyaes.AES(self.key)
 
-    def encrypt(self, data):
-        print(f"Encrypting with CCM mode..")
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
-
-        aes = pyaes.AES(self.key)
+    def _process_data(self, data, operation):
+        print(f"{operation.capitalize()}ing with CCM mode..")
         counter = int.from_bytes(self.iv, byteorder="big")
-
-        encrypted_data = b""
-        for i in range(0, len(padded_data), self.block_size):
-            counter_block = counter.to_bytes(self.block_size, byteorder="big")
-            counter += 1
-
-            keystream = aes.encrypt(counter_block)
-            block = padded_data[i : i + self.block_size]
-            encrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(self.block_size)]
-            )
-            encrypted_data += encrypted_block
-
-        return encrypted_data
-
-    def decrypt(self, data):
-        print(f"Decrypting with CCM mode..")
-        aes = pyaes.AES(self.key)
-        counter = int.from_bytes(self.iv, byteorder="big")
-
-        decrypted_data = b""
+        processed_data = b""
         for i in range(0, len(data), self.block_size):
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
             counter += 1
-
-            keystream = aes.encrypt(counter_block)
+            keystream = self.aes.encrypt(counter_block)
             block = data[i : i + self.block_size]
-            decrypted_block = bytes(
-                [block[j] ^ keystream[j] for j in range(self.block_size)]
+            processed_block = bytes(
+                [block[j] ^ keystream[j] for j in range(len(block))]
             )
-            decrypted_data += decrypted_block
+            processed_data += processed_block
+        return processed_data
 
-        return decrypted_data
+    def encrypt(self, data):
+        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        return self._process_data(padded_data, "encrypt")
+
+    def decrypt(self, data):
+        return self._process_data(data, "decrypt")
 
 
 class GUI:
