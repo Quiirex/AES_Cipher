@@ -41,7 +41,6 @@ class ECB:
 
 class CBC:
     def __init__(self, key, iv):
-        print(f"len(key): {len(key)}")
         self.key = key
         self.iv = iv
         self.block_size = 16
@@ -131,12 +130,27 @@ class CCM:
             processed_data += processed_block
         return processed_data
 
+    def _cbc_mac(self, data):
+        mac = b"\x00" * self.block_size
+        for i in range(0, len(data), self.block_size):
+            block = data[i : i + self.block_size]
+            mac = self.aes.encrypt(
+                bytes([mac[j] ^ block[j] for j in range(self.block_size)])
+            )
+        return mac
+
     def encrypt(self, data):
         padded_data = PaddingUtil.pad_data(data, self.block_size)
-        return self._process_data(padded_data, "encrypt")
+        ciphertext = self._process_data(padded_data, "encrypt")
+        mac = bytes(self._cbc_mac(ciphertext))
+        return ciphertext + mac
 
     def decrypt(self, data):
-        return self._process_data(data, "decrypt")
+        ciphertext = data[: -self.block_size]
+        mac = bytes(data[-self.block_size :])
+        if mac != bytes(self._cbc_mac(ciphertext)):
+            raise ValueError("Invalid MAC!")
+        return self._process_data(ciphertext, "decrypt")
 
 
 class GUI:
