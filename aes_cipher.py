@@ -5,13 +5,15 @@ import os
 import time
 
 
-class PaddingUtil:
+class PaddingUtil:  # PKCS#7 shema
     def pad_data(data, block_size):
         padding_length = block_size - len(data) % block_size
         return data + bytes([padding_length] * padding_length)
 
     def unpad_data(data):
         padding_length = data[-1]
+        if data[-padding_length:] != bytes([padding_length] * padding_length):
+            raise ValueError("Invalid padding")
         return data[:-padding_length]
 
 
