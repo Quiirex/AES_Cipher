@@ -7,13 +7,18 @@ import time
 
 class PaddingUtil:  # PKCS#7 shema
     def pad_data(data, block_size):
+        # Izračunamo dolžino polnila, ki je enaka razliki med velikostjo bloka in ostanekom dolžine podatkov deljeno z velikostjo bloka
         padding_length = block_size - len(data) % block_size
+        # Vrnemo podatke, katerim smo dodali polnilo
         return data + bytes([padding_length] * padding_length)
 
     def unpad_data(data):
+        # Dolžina polnila je enaka vrednosti zadnjega bajta
         padding_length = data[-1]
+        # Preverimo, ali je polnilo veljavno. Če ni, sprožimo napako
         if data[-padding_length:] != bytes([padding_length] * padding_length):
             raise ValueError("Invalid padding")
+        # Vrnemo podatke brez polnila
         return data[:-padding_length]
 
 
@@ -25,19 +30,29 @@ class ECB:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with ECB mode..")
+        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
+        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
+            # Izbor bloka podatkov
             block = data[i : i + self.block_size]
+            # Obdelava bloka podatkov
             processed_block = getattr(self.aes, operation)(block)
+            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += bytes(processed_block)
+        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
+        # Dodajanje polnila k podatkom
         padded_data = PaddingUtil.pad_data(data, self.block_size)
+        # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
     def decrypt(self, data):
+        # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
+        # Odstranjevanje polnila iz dešifriranih podatkov
         return PaddingUtil.unpad_data(decrypted_data)
 
 
@@ -50,34 +65,50 @@ class CBC:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CBC mode..")
+        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
+        # Začetni blok za XOR operacijo
         previous_block = self.iv
+        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
+            # Izbor bloka podatkov
             block = data[i : i + self.block_size]
+            # Če šifriramo, izvedemo XOR operacijo med blokom in prejšnjim blokom pred šifriranjem
             if operation == "encrypt":
                 block = bytes(
                     [block[j] ^ previous_block[j] for j in range(self.block_size)]
                 )
+                # Šifriranje bloka
                 processed_block = self.aes.encrypt(block)
+                # Nastavimo trenutni šifriran blok kot prejšnji blok za naslednjo iteracijo
                 previous_block = processed_block
             else:
+                # Dešifriranje bloka
                 processed_block = self.aes.decrypt(block)
+                # Izvedemo XOR operacijo med dešifriranim blokom in prejšnjim blokom
                 processed_block = bytes(
                     [
                         processed_block[j] ^ previous_block[j]
                         for j in range(self.block_size)
                     ]
                 )
+                # Nastavimo trenutni nešifriran blok kot prejšnji blok za naslednjo iteracijo
                 previous_block = block
+            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += bytes(processed_block)
+        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
+        # Dodajanje polnila k podatkom
         padded_data = PaddingUtil.pad_data(data, self.block_size)
+        # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
     def decrypt(self, data):
+        # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
+        # Odstranjevanje polnila iz dešifriranih podatkov
         return PaddingUtil.unpad_data(decrypted_data)
 
 
@@ -90,23 +121,35 @@ class CTR:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CTR mode..")
+        # Inicializacija števca iz začetnega vektorja
         counter = int.from_bytes(self.nonce, byteorder="big")
+        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
+        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
+            # Pretvorba števca v blok bajtov
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
+            # Povečanje števca
             counter += 1
+            # Šifriranje števca za ustvarjanje ključnega toka
             keystream = self.aes.encrypt(counter_block)
+            # Izbor bloka podatkov
             block = data[i : i + self.block_size]
+            # Izvedba XOR operacije med blokom podatkov in ključnim tokom
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
             )
+            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += processed_block
+        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
+        # Šifriranje podatkov
         return self._process_data(data, "encrypt")
 
     def decrypt(self, data):
+        # Dešifriranje podatkov
         return self._process_data(data, "decrypt")
 
 
@@ -119,39 +162,61 @@ class CCM:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CCM mode..")
+        # Inicializacija števca iz začetnega vektorja
         counter = int.from_bytes(self.iv, byteorder="big")
+        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
+        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
+            # Pretvorba števca v blok bajtov
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
+            # Povečanje števca
             counter += 1
+            # Šifriranje števca za ustvarjanje ključnega toka
             keystream = self.aes.encrypt(counter_block)
+            # Izbor bloka podatkov
             block = data[i : i + self.block_size]
+            # Izvedba XOR operacije med blokom podatkov in ključnim tokom
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
             )
+            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += processed_block
+        # Vrnemo obdelane podatke
         return processed_data
 
     def _cbc_mac(self, data):
+        # Inicializacija MAC vrednosti
         mac = b"\x00" * self.block_size
+        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
+            # Izbor bloka podatkov
             block = data[i : i + self.block_size]
+            # Izvedba XOR operacije med trenutno MAC vrednostjo in blokom podatkov, nato šifriranje rezultata
             mac = self.aes.encrypt(
                 bytes([mac[j] ^ block[j] for j in range(self.block_size)])
             )
+        # Vrnemo MAC vrednost
         return mac
 
     def encrypt(self, data):
+        # Dodajanje polnila k podatkom
         padded_data = PaddingUtil.pad_data(data, self.block_size)
+        # Šifriranje podatkov
         ciphertext = self._process_data(padded_data, "encrypt")
+        # Izračun MAC vrednosti šifriranih podatkov
         mac = bytes(self._cbc_mac(ciphertext))
+        # Vrnemo šifrirane podatke in MAC vrednost
         return ciphertext + mac
 
     def decrypt(self, data):
+        # Izbor šifriranih podatkov in MAC vrednosti iz vhodnih podatkov
         ciphertext = data[: -self.block_size]
         mac = bytes(data[-self.block_size :])
+        # Preverjanje veljavnosti MAC vrednosti
         if mac != bytes(self._cbc_mac(ciphertext)):
             raise ValueError("Invalid MAC!")
+        # Dešifriranje podatkov
         return self._process_data(ciphertext, "decrypt")
 
 
