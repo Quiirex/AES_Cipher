@@ -6,11 +6,13 @@ import time
 
 
 class PKCS7Padding:  # PKCS#7 shema
+    @staticmethod
     def pad_data(data, block_size):
         # Izračunamo dolžino polnila, ki je enaka razliki med velikostjo bloka in ostankom dolžine podatkov deljeno z velikostjo bloka
         padding_length = block_size - len(data) % block_size
         return data + bytes([padding_length] * padding_length)
 
+    @staticmethod
     def unpad_data(data):
         # Dolžina polnila je enaka vrednosti zadnjega bajta
         padding_length = data[-1]
@@ -23,17 +25,23 @@ class PKCS7Padding:  # PKCS#7 shema
 class ECB:
     def __init__(self, key):
         self.key = key
-        self.block_size = 16
+        self.block_size = 16  # 128-bitni blok
         self.aes = pyaes.AES(self.key)
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with ECB mode..")
         processed_data = b""
+
+        if operation == "encrypt":
+            operation_func = self.aes.encrypt
+        elif operation == "decrypt":
+            operation_func = self.aes.decrypt
+
         for i in range(0, len(data), self.block_size):
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
             # Obdelava bloka podatkov
-            processed_block = getattr(self.aes, operation)(block)
+            processed_block = operation_func(block)
             processed_data += bytes(processed_block)
         return processed_data
 
@@ -60,13 +68,13 @@ class CBC:
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CBC mode..")
         processed_data = b""
-        # Začetni blok za XOR operacijo
         previous_block = self.iv
-        for i in range(0, len(data), self.block_size):
-            # Izbor bloka podatkov
-            block = data[i : i + self.block_size]
-            # Če šifriramo, izvedemo XOR operacijo med trenutnim blokom in prejšnjim blokom pred šifriranjem
-            if operation == "encrypt":
+
+        if operation == "encrypt":
+            for i in range(0, len(data), self.block_size):
+                # Izbor bloka podatkov
+                block = data[i : i + self.block_size]
+                # Izvedemo XOR operacijo med trenutnim blokom in prejšnjim blokom pred šifriranjem
                 block = bytes(
                     [block[j] ^ previous_block[j] for j in range(self.block_size)]
                 )
@@ -74,7 +82,11 @@ class CBC:
                 processed_block = self.aes.encrypt(block)
                 # Nastavimo trenutni šifriran blok kot prejšnji blok za naslednjo iteracijo
                 previous_block = processed_block
-            else:
+                processed_data += bytes(processed_block)
+        elif operation == "decrypt":
+            for i in range(0, len(data), self.block_size):
+                # Izbor bloka podatkov
+                block = data[i : i + self.block_size]
                 # Dešifriranje bloka
                 processed_block = self.aes.decrypt(block)
                 # Izvedemo XOR operacijo med dešifriranim blokom in prejšnjim blokom
@@ -86,7 +98,10 @@ class CBC:
                 )
                 # Nastavimo trenutni nešifriran blok kot prejšnji blok za naslednjo iteracijo
                 previous_block = block
-            processed_data += bytes(processed_block)
+                processed_data += bytes(processed_block)
+        else:
+            raise ValueError("Invalid operation!")
+
         return processed_data
 
     def encrypt(self, data):
@@ -136,15 +151,15 @@ class CTR:
 
 
 class CCM:
-    def __init__(self, key, iv):
+    def __init__(self, key, nonce):
         self.key = key
-        self.iv = iv
+        self.nonce = nonce
         self.block_size = 16
         self.aes = pyaes.AES(self.key)
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CCM mode..")
-        counter = int.from_bytes(self.iv, byteorder="big")
+        counter = int.from_bytes(self.nonce, byteorder="big")
         processed_data = b""
         for i in range(0, len(data), self.block_size):
             # Pretvorba števca v blok bajtov
@@ -208,7 +223,7 @@ class GUI:
         self.nonce = None
         self.key_size = 16  # 128-bitni ključ
         self.iv_size = 16  # 128-bitni inicializacijski vektor
-        self.nonce_size = 8  # 64-bitni nonce
+        self.nonce_size = 4  # 32-bitni števec
 
         self.input_frame = tk.Frame(root)
         self.input_frame.grid(row=0, column=0, padx=20, pady=20)
@@ -335,7 +350,7 @@ class GUI:
         elif mode == "CTR":
             self.mode = CTR(self.key, self.nonce)
         elif mode == "CCM":
-            self.mode = CCM(self.key, self.iv)
+            self.mode = CCM(self.key, self.nonce)
 
     def generate_iv(self):
         self.iv = os.urandom(self.iv_size)
@@ -440,15 +455,16 @@ class GUI:
             if self.key is None:
                 messagebox.showerror("Error", "No key loaded!")
                 return
-            if (
-                isinstance(self.mode, CBC) or isinstance(self.mode, CCM)
-            ) and self.iv is None:
+            if (isinstance(self.mode, CBC)) and self.iv is None:
                 messagebox.showerror("Error", "No IV loaded!")
                 return
-            if (isinstance(self.mode, CTR)) and self.nonce is None:
+            if (
+                isinstance(self.mode, CTR) or isinstance(self.mode, CCM)
+            ) and self.nonce is None:
                 messagebox.showerror("Error", "No nonce loaded!")
                 return
             start = time.time()
+            print("---------------------------------------")
             print(f"Starting encryption..")
             self.encrypted_content = self.mode.encrypt(self.loaded_file_content)
             print(f"Encryption finished!")
@@ -470,15 +486,16 @@ class GUI:
             if self.key is None:
                 messagebox.showerror("Error", "No key loaded!")
                 return
-            if (
-                isinstance(self.mode, CBC) or isinstance(self.mode, CCM)
-            ) and self.iv is None:
+            if (isinstance(self.mode, CBC)) and self.iv is None:
                 messagebox.showerror("Error", "No IV loaded!")
                 return
-            if (isinstance(self.mode, CTR)) and self.nonce is None:
+            if (
+                isinstance(self.mode, CTR) or isinstance(self.mode, CCM)
+            ) and self.nonce is None:
                 messagebox.showerror("Error", "No nonce loaded!")
                 return
             start = time.time()
+            print("---------------------------------------")
             print(f"Starting decryption..")
             self.decrypted_content = self.mode.decrypt(self.loaded_file_content)
             print(f"Decryption finished!")
