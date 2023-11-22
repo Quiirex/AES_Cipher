@@ -5,11 +5,10 @@ import os
 import time
 
 
-class PaddingUtil:  # PKCS#7 shema
+class PKCS7Padding:  # PKCS#7 shema
     def pad_data(data, block_size):
-        # Izračunamo dolžino polnila, ki je enaka razliki med velikostjo bloka in ostanekom dolžine podatkov deljeno z velikostjo bloka
+        # Izračunamo dolžino polnila, ki je enaka razliki med velikostjo bloka in ostankom dolžine podatkov deljeno z velikostjo bloka
         padding_length = block_size - len(data) % block_size
-        # Vrnemo podatke, katerim smo dodali polnilo
         return data + bytes([padding_length] * padding_length)
 
     def unpad_data(data):
@@ -17,8 +16,7 @@ class PaddingUtil:  # PKCS#7 shema
         padding_length = data[-1]
         # Preverimo, ali je polnilo veljavno. Če ni, sprožimo napako
         if data[-padding_length:] != bytes([padding_length] * padding_length):
-            raise ValueError("Invalid padding")
-        # Vrnemo podatke brez polnila
+            raise ValueError("Invalid padding!")
         return data[:-padding_length]
 
 
@@ -30,22 +28,18 @@ class ECB:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with ECB mode..")
-        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
-        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
             # Obdelava bloka podatkov
             processed_block = getattr(self.aes, operation)(block)
-            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += bytes(processed_block)
-        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
         # Dodajanje polnila k podatkom
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        padded_data = PKCS7Padding.pad_data(data, self.block_size)
         # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
@@ -53,7 +47,7 @@ class ECB:
         # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
         # Odstranjevanje polnila iz dešifriranih podatkov
-        return PaddingUtil.unpad_data(decrypted_data)
+        return PKCS7Padding.unpad_data(decrypted_data)
 
 
 class CBC:
@@ -65,15 +59,13 @@ class CBC:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CBC mode..")
-        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
         # Začetni blok za XOR operacijo
         previous_block = self.iv
-        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
-            # Če šifriramo, izvedemo XOR operacijo med blokom in prejšnjim blokom pred šifriranjem
+            # Če šifriramo, izvedemo XOR operacijo med trenutnim blokom in prejšnjim blokom pred šifriranjem
             if operation == "encrypt":
                 block = bytes(
                     [block[j] ^ previous_block[j] for j in range(self.block_size)]
@@ -94,14 +86,12 @@ class CBC:
                 )
                 # Nastavimo trenutni nešifriran blok kot prejšnji blok za naslednjo iteracijo
                 previous_block = block
-            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += bytes(processed_block)
-        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
         # Dodajanje polnila k podatkom
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        padded_data = PKCS7Padding.pad_data(data, self.block_size)
         # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
@@ -109,7 +99,7 @@ class CBC:
         # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
         # Odstranjevanje polnila iz dešifriranih podatkov
-        return PaddingUtil.unpad_data(decrypted_data)
+        return PKCS7Padding.unpad_data(decrypted_data)
 
 
 class CTR:
@@ -121,35 +111,27 @@ class CTR:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CTR mode..")
-        # Inicializacija števca iz začetnega vektorja
         counter = int.from_bytes(self.nonce, byteorder="big")
-        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
-        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
             # Pretvorba števca v blok bajtov
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
-            # Povečanje števca
             counter += 1
             # Šifriranje števca za ustvarjanje ključnega toka
             keystream = self.aes.encrypt(counter_block)
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
-            # Izvedba XOR operacije med blokom podatkov in ključnim tokom
+            # Izvedba XOR operacije med blokom podatkov in tokom ključev
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
             )
-            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += processed_block
-        # Vrnemo obdelane podatke
         return processed_data
 
     def encrypt(self, data):
-        # Šifriranje podatkov
         return self._process_data(data, "encrypt")
 
     def decrypt(self, data):
-        # Dešifriranje podatkov
         return self._process_data(data, "decrypt")
 
 
@@ -162,51 +144,41 @@ class CCM:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CCM mode..")
-        # Inicializacija števca iz začetnega vektorja
         counter = int.from_bytes(self.iv, byteorder="big")
-        # Inicializacija praznega niza za obdelane podatke
         processed_data = b""
-        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
             # Pretvorba števca v blok bajtov
             counter_block = counter.to_bytes(self.block_size, byteorder="big")
-            # Povečanje števca
             counter += 1
-            # Šifriranje števca za ustvarjanje ključnega toka
+            # Šifriranje bloka števca za ustvarjanje toka ključev
             keystream = self.aes.encrypt(counter_block)
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
-            # Izvedba XOR operacije med blokom podatkov in ključnim tokom
+            # Izvedba XOR operacije med blokom podatkov in tokom ključev
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
             )
-            # Dodajanje obdelanega bloka k obdelanim podatkom
             processed_data += processed_block
-        # Vrnemo obdelane podatke
         return processed_data
 
     def _cbc_mac(self, data):
-        # Inicializacija MAC vrednosti
         mac = b"\x00" * self.block_size
-        # Obdelava podatkov po blokih
         for i in range(0, len(data), self.block_size):
             # Izbor bloka podatkov
             block = data[i : i + self.block_size]
-            # Izvedba XOR operacije med trenutno MAC vrednostjo in blokom podatkov, nato šifriranje rezultata
-            mac = self.aes.encrypt(
-                bytes([mac[j] ^ block[j] for j in range(self.block_size)])
-            )
-        # Vrnemo MAC vrednost
+            # Izvedba XOR operacije med trenutno MAC vrednostjo in blokom podatkov
+            mac = bytes([mac[j] ^ block[j] for j in range(self.block_size)])
+            # Šifriranje trenutne MAC vrednosti
+            mac = self.aes.encrypt(mac)
         return mac
 
     def encrypt(self, data):
         # Dodajanje polnila k podatkom
-        padded_data = PaddingUtil.pad_data(data, self.block_size)
+        padded_data = PKCS7Padding.pad_data(data, self.block_size)
         # Šifriranje podatkov
         ciphertext = self._process_data(padded_data, "encrypt")
         # Izračun MAC vrednosti šifriranih podatkov
         mac = bytes(self._cbc_mac(ciphertext))
-        # Vrnemo šifrirane podatke in MAC vrednost
         return ciphertext + mac
 
     def decrypt(self, data):
@@ -307,7 +279,7 @@ class GUI:
             command=self.load_file,
             width=8,
         )
-        self.load_file_button.grid(row=0, column=0)
+        self.load_file_button.grid(row=0, column=0, pady=10)
 
         self.generate_key_button = tk.Button(
             self.button_frame, text="Generate key", command=self.generate_key, width=8
@@ -348,12 +320,12 @@ class GUI:
         self.encrypt_button = tk.Button(
             self.button_frame, text="Encrypt", command=self.encrypt_file, width=8
         )
-        self.encrypt_button.grid(row=4, column=0)
+        self.encrypt_button.grid(row=4, column=0, pady=10)
 
         self.decrypt_button = tk.Button(
             self.button_frame, text="Decrypt", command=self.decrypt_file, width=8
         )
-        self.decrypt_button.grid(row=4, column=1)
+        self.decrypt_button.grid(row=4, column=1, pady=10)
 
     def set_mode(self, mode):
         if mode == "ECB":
