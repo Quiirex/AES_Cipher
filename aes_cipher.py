@@ -5,7 +5,7 @@ import os
 import time
 
 
-class PKCS7Padding:  # PKCS#7 shema
+class PKCS7:  # PKCS#7 shema
     @staticmethod
     def pad_data(data, block_size):
         # Izračunamo dolžino polnila, ki je enaka razliki med velikostjo bloka in ostankom dolžine podatkov deljeno z velikostjo bloka
@@ -25,7 +25,7 @@ class PKCS7Padding:  # PKCS#7 shema
 class ECB:
     def __init__(self, key):
         self.key = key
-        self.block_size = 16  # 128-bitni blok
+        self.block_size = 16
         self.aes = pyaes.AES(self.key)
 
     def _process_data(self, data, operation):
@@ -47,7 +47,7 @@ class ECB:
 
     def encrypt(self, data):
         # Dodajanje polnila k podatkom
-        padded_data = PKCS7Padding.pad_data(data, self.block_size)
+        padded_data = PKCS7.pad_data(data, self.block_size)
         # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
@@ -55,7 +55,7 @@ class ECB:
         # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
         # Odstranjevanje polnila iz dešifriranih podatkov
-        return PKCS7Padding.unpad_data(decrypted_data)
+        return PKCS7.unpad_data(decrypted_data)
 
 
 class CBC:
@@ -106,7 +106,7 @@ class CBC:
 
     def encrypt(self, data):
         # Dodajanje polnila k podatkom
-        padded_data = PKCS7Padding.pad_data(data, self.block_size)
+        padded_data = PKCS7.pad_data(data, self.block_size)
         # Šifriranje podatkov
         return self._process_data(padded_data, "encrypt")
 
@@ -114,7 +114,7 @@ class CBC:
         # Dešifriranje podatkov
         decrypted_data = self._process_data(data, "decrypt")
         # Odstranjevanje polnila iz dešifriranih podatkov
-        return PKCS7Padding.unpad_data(decrypted_data)
+        return PKCS7.unpad_data(decrypted_data)
 
 
 class CTR:
@@ -178,35 +178,33 @@ class CCM:
 
     def _cbc_mac(self, data):
         mac = b"\x00" * self.block_size
+        data = PKCS7.pad_data(data, self.block_size)
         for i in range(0, len(data), self.block_size):
-            # Izbor bloka podatkov
+            # Izbira bloka podatkov
             block = data[i : i + self.block_size]
-            # Izvedba XOR operacije med trenutno MAC vrednostjo in blokom podatkov
+            # Izvedba XOR operacije med trenutnim MAC vrednostjo in trenutnim blokom podatkov
             mac = bytes([mac[j] ^ block[j] for j in range(self.block_size)])
-            # Šifriranje trenutne MAC vrednosti
+            # Šifriranje MAC vrednosti
             mac = self.aes.encrypt(mac)
         return mac
 
     def encrypt(self, data):
-        # Dodajanje polnila k podatkom
-        padded_data = PKCS7Padding.pad_data(data, self.block_size)
+        # Izračun MAC vrednosti
+        mac = bytes(self._cbc_mac(data))
         # Šifriranje podatkov
-        ciphertext = self._process_data(padded_data, "encrypt")
-        # Izračun MAC vrednosti šifriranih podatkov
-        mac = bytes(self._cbc_mac(ciphertext))
+        ciphertext = self._process_data(data, "encrypt")
         return ciphertext + mac
 
     def decrypt(self, data):
-        # Izbor šifriranih podatkov in MAC vrednosti iz vhodnih podatkov
+        # Izberemo šifrirni tekst in MAC vrednost
         ciphertext = data[: -self.block_size]
         mac = bytes(data[-self.block_size :])
-        # Preverjanje veljavnosti MAC vrednosti
-        if mac != bytes(self._cbc_mac(ciphertext)):
-            raise ValueError("Invalid MAC!")
         # Dešifriranje podatkov
         decrypted_data = self._process_data(ciphertext, "decrypt")
-        # Odstranjevanje polnila iz dešifriranih podatkov
-        return PKCS7Padding.unpad_data(decrypted_data)
+        # Preverjanje MAC vrednosti
+        if mac != bytes(self._cbc_mac(decrypted_data)):
+            raise ValueError("Invalid MAC!")
+        return decrypted_data
 
 
 class GUI:
