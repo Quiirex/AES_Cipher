@@ -204,7 +204,9 @@ class CCM:
         if mac != bytes(self._cbc_mac(ciphertext)):
             raise ValueError("Invalid MAC!")
         # Dešifriranje podatkov
-        return self._process_data(ciphertext, "decrypt")
+        decrypted_data = self._process_data(ciphertext, "decrypt")
+        # Odstranjevanje polnila iz dešifriranih podatkov
+        return PKCS7Padding.unpad_data(decrypted_data)
 
 
 class GUI:
