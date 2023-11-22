@@ -204,6 +204,8 @@ class CCM:
         # Preverjanje MAC vrednosti
         if mac != bytes(self._cbc_mac(decrypted_data)):
             raise ValueError("Invalid MAC!")
+        else:
+            print("MAC is valid!")
         return decrypted_data
 
 
