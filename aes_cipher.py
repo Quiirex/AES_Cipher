@@ -106,12 +106,16 @@ class CTR:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CTR mode..")
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        nonce_int = int.from_bytes(self.nonce, byteorder="big")
+        counter = 0
         processed_data = b""
         for i in range(0, len(data), self.block_size):
-            counter_block = counter.to_bytes(self.block_size, byteorder="big")
+            # IV block je sestavljen iz 64-bitnega števca in 64-bitnega nonce-a
+            iv_block = ((nonce_int << 64) | counter).to_bytes(
+                self.block_size, byteorder="big"
+            )
             counter += 1
-            keystream = self.aes.encrypt(counter_block)
+            keystream = self.aes.encrypt(iv_block)
             block = data[i : i + self.block_size]
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
@@ -135,10 +139,14 @@ class CCM:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CCM mode..")
-        counter = int.from_bytes(self.nonce, byteorder="big")
+        nonce_int = int.from_bytes(self.nonce, byteorder="big")
+        counter = 0
         processed_data = b""
         for i in range(0, len(data), self.block_size):
-            counter_block = counter.to_bytes(self.block_size, byteorder="big")
+            # IV block je sestavljen iz 64-bitnega števca in 64-bitnega nonce-a
+            counter_block = ((nonce_int << 64) | counter).to_bytes(
+                self.block_size, byteorder="big"
+            )
             counter += 1
             keystream = self.aes.encrypt(counter_block)
             block = data[i : i + self.block_size]
@@ -189,7 +197,7 @@ class GUI:
         self.nonce = None
         self.key_size = 16  # 128-bitni ključ
         self.iv_size = 16  # 128-bitni inicializacijski vektor
-        self.nonce_size = 4  # 32-bitni števec
+        self.nonce_size = 8  # 64-bitni števec
 
         self.input_frame = tk.Frame(root)
         self.input_frame.grid(row=0, column=0, padx=20, pady=20)
