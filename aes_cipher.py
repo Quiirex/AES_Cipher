@@ -140,9 +140,9 @@ class CCM:
         processed_data = b""
         for i in range(0, len(data), self.block_size):
             # IV block je sestavljen iz 64-bitnega števca in 64-bitnega nonce-a
-            counter_block = ((nonce_int << 64) | counter).to_bytes(self.block_size)
+            iv_block = ((nonce_int << 64) | counter).to_bytes(self.block_size)
             counter += 1
-            keystream = self.aes.encrypt(counter_block)
+            keystream = self.aes.encrypt(iv_block)
             block = data[i : i + self.block_size]
             processed_block = bytes(
                 [block[j] ^ keystream[j] for j in range(len(block))]
