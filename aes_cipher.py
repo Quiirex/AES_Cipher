@@ -172,9 +172,11 @@ class CCM:
 
     def decrypt(self, data):
         ciphertext = data[: -self.block_size]
-        mac = bytes(data[-self.block_size :])
+        mac_of_ciphertext = bytes(data[-self.block_size :])
         decrypted_data = self._process_data(ciphertext, "decrypt")
-        if mac != bytes(self._cbc_mac(decrypted_data)):
+        mac_of_plaintext = bytes(self._cbc_mac(decrypted_data))
+        print("Checking MAC..")
+        if mac_of_ciphertext != mac_of_plaintext:
             raise ValueError("Invalid MAC!")
         else:
             print("MAC is valid!")
