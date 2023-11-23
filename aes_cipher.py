@@ -6,12 +6,10 @@ import time
 
 
 class PKCS7:  # PKCS#7 shema
-    @staticmethod
     def pad_data(data, block_size):
         padding_length = block_size - len(data) % block_size
         return data + bytes([padding_length] * padding_length)
 
-    @staticmethod
     def unpad_data(data):
         # Dolžina polnila je enaka vrednosti zadnjega bajta
         padding_length = data[-1]
