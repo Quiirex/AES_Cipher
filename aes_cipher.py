@@ -104,14 +104,12 @@ class CTR:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CTR mode..")
-        nonce_int = int.from_bytes(self.nonce, byteorder="big")
+        nonce_int = int.from_bytes(self.nonce)
         counter = 0
         processed_data = b""
         for i in range(0, len(data), self.block_size):
             # IV block je sestavljen iz 64-bitnega števca in 64-bitnega nonce-a
-            iv_block = ((nonce_int << 64) | counter).to_bytes(
-                self.block_size, byteorder="big"
-            )
+            iv_block = ((nonce_int << 64) | counter).to_bytes(self.block_size)
             counter += 1
             keystream = self.aes.encrypt(iv_block)
             block = data[i : i + self.block_size]
@@ -137,14 +135,12 @@ class CCM:
 
     def _process_data(self, data, operation):
         print(f"{operation.capitalize()}ing with CCM mode..")
-        nonce_int = int.from_bytes(self.nonce, byteorder="big")
+        nonce_int = int.from_bytes(self.nonce)
         counter = 0
         processed_data = b""
         for i in range(0, len(data), self.block_size):
             # IV block je sestavljen iz 64-bitnega števca in 64-bitnega nonce-a
-            counter_block = ((nonce_int << 64) | counter).to_bytes(
-                self.block_size, byteorder="big"
-            )
+            counter_block = ((nonce_int << 64) | counter).to_bytes(self.block_size)
             counter += 1
             keystream = self.aes.encrypt(counter_block)
             block = data[i : i + self.block_size]
