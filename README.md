@@ -1,6 +1,6 @@
 # AES Cipher
 
-A python + tkinter application of the AES cipher.
+A python + tkinter implementation of the AES cipher.
 
 ## The background
 
